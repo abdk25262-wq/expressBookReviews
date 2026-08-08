@@ -1,41 +1,42 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const session = require('express-session')
-const customer_routes = require('./router/auth_users.js').authenticated;
-const genl_routes = require('./router/general.js').general;
+const session = require('express-session');
+const generalRoutes = require('./general.js').general;
+const authRoutes = require('./auth_users.js').authenticated;
 
 const app = express();
 
 app.use(express.json());
+app.use(session({
+  secret: "fingerprint_customer",
+  resave: true,
+  saveUninitialized: true
+}));
 
-app.use("/customer",session({secret:"fingerprint_customer",resave: true, saveUninitialized: true}))
+// Mount public routes (no authentication required)
+app.use("/customer", generalRoutes);
 
+// Mount auth routes (includes login, register, and protected routes)
+app.use("/customer", authRoutes);
+
+// ============================================
+// Authentication middleware for /customer/auth/*
+// (this protects all routes starting with /customer/auth/)
+// ============================================
 app.use("/customer/auth/*", function auth(req, res, next) {
-    // Check if the session contains authorization data
-    if (req.session.authorization) {
-        // Retrieve the access token from the session
-        let token = req.session.authorization['accessToken'];
-
-        // Verify the JWT token
-        jwt.verify(token, "access", (err, user) => {
-            if (!err) {
-                // Authentication successful: attach user info to the request object
-                req.user = user;
-                next();
-            } else {
-                // Token is invalid or expired
-                return res.status(403).json({ message: "User not authenticated" });
-            }
-        });
-    } else {
-        // No authorization data found in the session (user is not logged in)
-        return res.status(403).json({ message: "User not logged in" });
-    }
+  if (req.session.authorization) {
+    let token = req.session.authorization['accessToken'];
+    jwt.verify(token, "access", (err, user) => {
+      if (!err) {
+        req.user = user;   // attach user info for later use
+        next();
+      } else {
+        return res.status(403).json({ message: "User not authenticated" });
+      }
+    });
+  } else {
+    return res.status(403).json({ message: "User not logged in" });
+  }
 });
- 
-const PORT =5000;
 
-app.use("/customer", customer_routes);
-app.use("/", genl_routes);
-
-app.listen(PORT,()=>console.log("Server is running"));
+// ... (any additional routes or server start)
